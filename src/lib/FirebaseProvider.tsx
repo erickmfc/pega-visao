@@ -20,6 +20,7 @@ interface UserProfile {
   avatar?: string;
   rating: number;
   isOnline: boolean;
+  hasVehicleRegistered: boolean;
   currentEarnings: number;
   totalDeliveries: number;
   dailyGoal: number;
@@ -46,7 +47,10 @@ interface FirebaseContextType {
   profile: UserProfile | null;
   deliveries: Delivery[];
   loading: boolean;
+  isLocating: boolean;
+  locationError: string | null;
   coords: { lat: number, lng: number } | null;
+  lastVerified: number;
   toggleOnline: () => Promise<void>;
 }
 
@@ -57,14 +61,23 @@ export function FirebaseProvider({ children }: { children: React.ReactNode }) {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [deliveries, setDeliveries] = useState<Delivery[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isLocating, setIsLocating] = useState(false);
+  const [locationError, setLocationError] = useState<string | null>(null);
   const [coords, setCoords] = useState<{ lat: number, lng: number } | null>(null);
+  const [lastVerified, setLastVerified] = useState<number>(Date.now());
 
   useEffect(() => {
     let watchId: number;
 
     if (profile?.isOnline && navigator.geolocation) {
+      setIsLocating(true);
+      setLocationError(null);
+
       watchId = navigator.geolocation.watchPosition(
         (position) => {
+          setIsLocating(false);
+          setLocationError(null);
+          setLastVerified(Date.now());
           const newCoords = {
             lat: position.coords.latitude,
             lng: position.coords.longitude
@@ -82,8 +95,16 @@ export function FirebaseProvider({ children }: { children: React.ReactNode }) {
             }, { merge: true }).catch(console.error);
           }
         },
-        (error) => console.error("Geolocation error:", error),
-        { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 }
+        (error) => {
+          setIsLocating(false);
+          let message = "Erro ao obter localização.";
+          if (error.code === error.PERMISSION_DENIED) {
+            message = "Ative a localização para usar rotas em tempo real.";
+          }
+          setLocationError(message);
+          console.error("Geolocation error:", error);
+        },
+        { enableHighAccuracy: true, timeout: 15000, maximumAge: 5000 }
       );
     }
 
@@ -111,6 +132,7 @@ export function FirebaseProvider({ children }: { children: React.ReactNode }) {
               avatar: user.photoURL || '',
               rating: 5.0,
               isOnline: true,
+              hasVehicleRegistered: false,
               currentEarnings: 0,
               totalDeliveries: 0,
               dailyGoal: 200,
@@ -151,7 +173,7 @@ export function FirebaseProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <FirebaseContext.Provider value={{ user, profile, deliveries, loading, coords, toggleOnline }}>
+    <FirebaseContext.Provider value={{ user, profile, deliveries, loading, isLocating, locationError, coords, lastVerified, toggleOnline }}>
       {children}
     </FirebaseContext.Provider>
   );

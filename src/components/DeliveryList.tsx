@@ -2,7 +2,12 @@ import { motion } from 'motion/react';
 import DeliveryCard from './DeliveryCard';
 import { useFirebase } from '../lib/FirebaseProvider';
 
-export default function DeliveryList() {
+interface DeliveryListProps {
+  onFinishRoute?: () => void;
+  onNavigate?: (delivery: { id: string, address: string }) => void;
+}
+
+export default function DeliveryList({ onFinishRoute, onNavigate }: DeliveryListProps) {
   const { deliveries } = useFirebase();
 
   return (
@@ -15,27 +20,43 @@ export default function DeliveryList() {
     >
       <div className="w-12 h-1.5 bg-surface-highest rounded-full mb-3 shadow-sm opacity-50" />
       
-      <div className="w-full max-w-lg bg-surface-lowest rounded-t-[32px] shadow-[0_-12px_40px_rgba(0,0,0,0.1)] pointer-events-auto flex flex-col h-[80vh] border-t border-surface-highest">
+      <div className="w-full max-w-lg bg-white/95 backdrop-blur-3xl rounded-t-[2.5rem] shadow-[0_-20px_50px_rgba(0,0,0,0.08)] pointer-events-auto flex flex-col h-[85vh] border-t border-gray-100">
         
-        <div className="px-8 py-5 border-b border-surface-low flex justify-between items-center bg-white rounded-t-[32px] sticky top-0 z-10">
-          <h2 className="font-display font-bold text-xl text-on-surface">Rota Atual</h2>
-          <div className="bg-primary px-3 py-1 rounded-full shadow-sm">
-            <span className="text-[10px] font-lexend font-bold text-primary-dark">{deliveries.filter(d => d.status === 'PENDENTE').length} PENDENTES</span>
+        <div className="px-6 py-5 border-b border-gray-50 flex justify-between items-center bg-white/50 rounded-t-[2.5rem] sticky top-0 z-10">
+          <div>
+            <h2 className="font-display font-black italic text-lg text-primary-dark tracking-tight">ROTA ATIVA</h2>
+            <p className="text-[7px] font-lexend font-black text-gray-400 uppercase tracking-[0.2em] -mt-1">Trajeto em tempo real</p>
           </div>
+          <div className="bg-primary/20 px-3 py-1.5 rounded-full border border-primary/20">
+            <span className="text-[9px] font-lexend font-black text-primary-dark tracking-tighter">
+              {deliveries.filter(d => d.status === 'PENDENTE').length} PENDENTES
+            </span>
+          </div>
+          {deliveries.length > 0 && onFinishRoute && (
+            <button 
+              onClick={onFinishRoute}
+              className="ml-2 bg-primary-dark text-white text-[8px] font-black px-3 py-2 rounded-lg active:scale-95 transition-all shadow-lg shadow-black/10"
+            >
+              FINALIZAR
+            </button>
+          )}
         </div>
 
-        <div className="overflow-y-auto p-4 flex flex-col gap-4 pb-24 touch-pan-y">
+        <div className="overflow-y-auto p-4 flex flex-col gap-3 pb-32 touch-pan-y no-scrollbar">
           {deliveries.length > 0 ? (
             deliveries.map((delivery, index) => {
               const isFirstPending = index === deliveries.findIndex(d => d.status === 'PENDENTE');
               return (
-                <div key={delivery.id} className={isFirstPending ? 'scale-[1.02] -rotate-1 ring-4 ring-primary/20 rounded-2xl z-10 transition-all' : ''}>
+                <div key={delivery.id} className={isFirstPending ? 'scale-[1.01] transition-all' : ''}>
                   {isFirstPending && (
-                    <div className="bg-primary text-primary-dark text-[10px] font-black px-3 py-1 rounded-t-xl inline-block ml-4 shadow-sm">
-                      PRÓXIMA PARADA
+                    <div className="flex items-center gap-1.5 mb-1 ml-1">
+                      <div className="w-1 h-1 rounded-full bg-primary" />
+                      <span className="text-[8px] font-lexend font-black text-gray-400 uppercase tracking-[0.2em]">
+                        Próxima
+                      </span>
                     </div>
                   )}
-                  <DeliveryCard {...delivery} />
+                  <DeliveryCard {...delivery} onNavigate={onNavigate} />
                 </div>
               );
             })

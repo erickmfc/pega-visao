@@ -11,12 +11,56 @@
         "avatar": { "type": "string" },
         "rating": { "type": "number" },
         "isOnline": { "type": "boolean" },
+        "hasVehicleRegistered": { "type": "boolean" },
         "currentEarnings": { "type": "number" },
         "totalDeliveries": { "type": "number" },
         "dailyGoal": { "type": "number" },
         "updatedAt": { "type": "string", "format": "date-time" }
       },
       "required": ["uid", "name", "email"]
+    },
+    "Vehicle": {
+      "title": "Vehicle",
+      "description": "Vehicle information for cost calculation.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "type": { "type": "string", "enum": ["Moto", "Carro"] },
+        "brand": { "type": "string" },
+        "model": { "type": "string" },
+        "year": { "type": "number" },
+        "averageKmPerLiter": { "type": "number" },
+        "fuelType": { "type": "string", "enum": ["Gasolina", "Etanol", "Flex", "Diesel"] },
+        "tankCapacityLiters": { "type": "number" },
+        "nickname": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      }
+    },
+    "DeliverySession": {
+      "title": "Delivery Session",
+      "description": "Summary of a completed route.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "vehicleId": { "type": "string" },
+        "startedAt": { "type": "string", "format": "date-time" },
+        "finishedAt": { "type": "string", "format": "date-time" },
+        "totalDeliveries": { "type": "number" },
+        "optimizedDistanceKm": { "type": "number" },
+        "estimatedNormalDistanceKm": { "type": "number" },
+        "totalDistanceKm": { "type": "number" },
+        "totalTimeMinutes": { "type": "number" },
+        "fuelPricePerLiter": { "type": "number" },
+        "estimatedFuelUsedLiters": { "type": "number" },
+        "estimatedFuelCost": { "type": "number" },
+        "grossEarnings": { "type": "number" },
+        "netProfit": { "type": "number" },
+        "savedKm": { "type": "number" },
+        "savedFuelLiters": { "type": "number" },
+        "savedMoney": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      }
     },
     "Delivery": {
       "title": "Delivery",
@@ -57,6 +101,14 @@
     "earnings/{earningId}": {
       "schema": "Earning",
       "description": "Store individual earning records."
+    },
+    "vehicles/{vehicleId}": {
+      "schema": "Vehicle",
+      "description": "Store vehicle information."
+    },
+    "delivery_sessions/{sessionId}": {
+      "schema": "DeliverySession",
+      "description": "Store end-of-route summary data."
     }
   }
 }

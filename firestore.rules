@@ -27,6 +27,7 @@ service cloud.firestore {
                data.name is string && data.name.size() <= 100 &&
                data.email is string && data.email.size() <= 100 &&
                (data.get('isOnline', true) is bool) &&
+               (data.get('hasVehicleRegistered', false) is bool) &&
                (data.get('currentEarnings', 0) is number) &&
                (data.get('totalDeliveries', 0) is number) &&
                (data.get('dailyGoal', 0) is number);
@@ -35,7 +36,35 @@ service cloud.firestore {
       allow get: if isSignedIn(); // Allow reading basic profile
       allow create: if isSignedIn() && isOwner(userId) && isValidUser(request.resource.data);
       allow update: if isSignedIn() && isOwner(userId) && isValidUser(request.resource.data) &&
-                    (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name', 'avatar', 'isOnline', 'currentEarnings', 'totalDeliveries', 'dailyGoal', 'updatedAt', 'lastLocation']));
+                    (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name', 'avatar', 'isOnline', 'hasVehicleRegistered', 'currentEarnings', 'totalDeliveries', 'dailyGoal', 'updatedAt', 'lastLocation']));
+    }
+
+    // --- Vehicle Rules ---
+    match /vehicles/{vehicleId} {
+      function isValidVehicle(data) {
+        return data.keys().hasAll(['userId', 'type', 'brand', 'model', 'year', 'averageKmPerLiter', 'fuelType', 'tankCapacityLiters']) &&
+               data.userId == request.auth.uid &&
+               data.type in ['Moto', 'Carro'] &&
+               data.brand is string && data.brand.size() > 0 &&
+               data.model is string && data.model.size() > 0 &&
+               data.year is number && data.year >= 1900 &&
+               data.averageKmPerLiter is number && data.averageKmPerLiter > 0 &&
+               data.fuelType in ['Gasolina', 'Etanol', 'Flex', 'Diesel'] &&
+               data.tankCapacityLiters is number && data.tankCapacityLiters > 0;
+      }
+
+      allow list: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow get: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow create: if isSignedIn() && isValidVehicle(request.resource.data);
+      allow update: if isSignedIn() && resource.data.userId == request.auth.uid && isValidVehicle(request.resource.data);
+      allow delete: if isSignedIn() && resource.data.userId == request.auth.uid;
+    }
+
+    // --- Delivery Session Rules ---
+    match /delivery_sessions/{sessionId} {
+      allow list: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow get: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
     }
 
     // --- Delivery Rules ---
