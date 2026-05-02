@@ -5,9 +5,10 @@ import { motion } from 'motion/react';
 interface QuickActionsProps {
   onAddDelivery: () => void;
   onShowStats: () => void;
+  onScanBatch?: () => void;
 }
 
-export default function QuickActions({ onAddDelivery, onShowStats }: QuickActionsProps) {
+export default function QuickActions({ onAddDelivery, onShowStats, onScanBatch }: QuickActionsProps) {
   return (
     <div className="flex gap-2 w-full justify-center">
       <motion.button 

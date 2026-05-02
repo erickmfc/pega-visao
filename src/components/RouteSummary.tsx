@@ -12,7 +12,8 @@ import {
   Edit3, 
   Plus, 
   Info,
-  ArrowUpRight
+  ArrowUpRight,
+  X
 } from 'lucide-react';
 import { 
   collection, 
@@ -78,9 +79,21 @@ export default function RouteSummary({ onDone }: { onDone: () => void }) {
   const moneySaved = litersSaved * fuelPrice;
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col pb-12">
+    <motion.div 
+      initial={{ opacity: 0, y: 100 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: 100 }}
+      className="fixed inset-0 bg-gray-50 z-[100] flex flex-col pb-12 overflow-y-auto"
+    >
       {/* Header */}
-      <div className="bg-primary p-8 pt-12 pb-10 rounded-b-[3rem] shadow-xl shadow-primary/10">
+      <div className="bg-primary p-8 pt-12 pb-10 rounded-b-[3rem] shadow-xl shadow-primary/10 relative">
+        <button 
+          onClick={onDone}
+          className="absolute top-6 right-6 p-2 bg-white/20 rounded-full text-primary-dark backdrop-blur-md active:scale-90 transition-all border border-white/30"
+        >
+          <X className="w-5 h-5" />
+        </button>
+
         <div className="flex justify-between items-start">
           <div>
             <h1 className="text-2xl font-display font-black text-primary-dark tracking-tighter">RESUMO DA ROTA</h1>
@@ -103,7 +116,7 @@ export default function RouteSummary({ onDone }: { onDone: () => void }) {
         </div>
       </div>
 
-      <div className="px-6 -mt-6 space-y-4">
+      <div className="px-6 -mt-6 space-y-4 pb-24">
         
         {/* Grid of Metrics */}
         <div className="grid grid-cols-2 gap-3">
@@ -185,7 +198,7 @@ export default function RouteSummary({ onDone }: { onDone: () => void }) {
           </div>
         </div>
       </div>
-    </div>
+    </motion.div>
   );
 }
 

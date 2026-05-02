@@ -37,19 +37,91 @@ const destIcon = new L.DivIcon({
   iconAnchor: [16, 16],
 });
 
+// Anti-error route logic helpers
+function calculateStraightDistance(lat1: number, lon1: number, lat2: number, lon2: number) {
+  const R = 6371000;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+    Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+function validateRoute(
+  origin: { lat: number, lng: number },
+  destination: { lat: number, lng: number },
+  route: any,
+  previousRoute: any | null
+): { ok: boolean; reason: string } {
+  if (!origin || !destination) return { ok: false, reason: "Dados ausentes." };
+  
+  const straightDist = calculateStraightDistance(origin.lat, origin.lng, destination.lat, destination.lng);
+  
+  // 1. Check if already there
+  if (straightDist < 25) return { ok: false, reason: "Você já está no destino." };
+  
+  // 2. Check API data
+  if (!route || typeof route.distance !== 'number' || typeof route.duration !== 'number') {
+    return { ok: false, reason: "API não retornou dados válidos." };
+  }
+
+  // 3. Check for absurd route line (too few points)
+  if (!route.coords || route.coords.length < 5) {
+    return { ok: false, reason: "Desenho da rota inválido." };
+  }
+
+  // 4. Inconsistency: route distance significantly shorter than straight distance
+  if (route.distance < straightDist * 0.9) {
+    return { ok: false, reason: "Distância calculada menor que a real." };
+  }
+
+  // 5. Absurdly long route
+  if (route.distance > straightDist * 10) {
+    return { ok: false, reason: "Rota excessivamente longa." };
+  }
+
+  // 6. Impossible speeds
+  const avgSpeedKmh = (route.distance / 1000) / (route.duration / 3600);
+  if (avgSpeedKmh < 2) return { ok: false, reason: "Tempo alto demais para a distância." };
+  if (avgSpeedKmh > 110) return { ok: false, reason: "Tempo baixo demais (Impossível)." };
+
+  // 7. Cache Lock Check: Same route for different destination
+  if (previousRoute) {
+    const destChangedDist = calculateStraightDistance(
+      previousRoute.destLat, 
+      previousRoute.destLng, 
+      destination.lat, 
+      destination.lng
+    );
+
+    const sameDistance = Math.abs(previousRoute.distance - route.distance) < 20;
+    const sameDuration = Math.abs(previousRoute.duration - route.duration) < 10;
+    const samePath = previousRoute.polyline === route.polyline;
+
+    if (destChangedDist > 100 && sameDistance && sameDuration && samePath) {
+      return { ok: false, reason: "A API retornou a mesma rota anterior." };
+    }
+  }
+
+  return { ok: true, reason: "Verificada" };
+}
+
 function MapEffects({ coords, recenterTrigger, route }: { coords: { lat: number, lng: number } | null, recenterTrigger: number, route: [number, number][] }) {
   const map = useMap();
+  const [hasCentered, setHasCentered] = useState(false);
 
   useEffect(() => {
     if (map && coords) {
       if (route.length > 0) {
         const bounds = L.latLngBounds(route);
-        map.fitBounds(bounds, { padding: [50, 50] });
-      } else {
+        map.fitBounds(bounds, { padding: [80, 80] });
+      } else if (!hasCentered || recenterTrigger > 0) {
         map.flyTo([coords.lat, coords.lng], 18, { duration: 1.5 });
+        setHasCentered(true);
       }
     }
-  }, [map, coords, recenterTrigger, route.length > 0]);
+  }, [map, coords, recenterTrigger, route.length]);
 
   return null;
 }
@@ -63,65 +135,214 @@ export default function MapBackground({ navigatingTo, onCancelNavigation }: MapB
   const { profile, coords, isLocating, locationError, lastVerified } = useFirebase();
   const [recenterTrigger, setRecenterTrigger] = useState(0);
   const [route, setRoute] = useState<[number, number][]>([]);
-  const [routeInfo, setRouteInfo] = useState<{ distance: string, duration: string } | null>(null);
+  const [destCoords, setDestCoords] = useState<{lat: number, lng: number} | null>(null);
+  const [routeInfo, setRouteInfo] = useState<{ distance: string, duration: string, status: string } | null>(null);
+  const [navigationSteps, setNavigationSteps] = useState<any[]>([]);
+  const [currentStepIndex, setCurrentStepIndex] = useState(0);
+  const [isCalculating, setIsCalculating] = useState(false);
+  const [lastValidRoute, setLastValidRoute] = useState<any | null>(null);
 
-  // Efeito para calcular a rota usando OSRM
+  // Helper to translate maneuvers
+  const getManeuverText = (maneuver: any) => {
+    const type = maneuver.type;
+    const modifier = maneuver.modifier || '';
+    
+    const translations: Record<string, string> = {
+      'turn': 'Vire',
+      'new name': 'Continue na',
+      'depart': 'Siga em frente',
+      'arrive': 'Você chegou ao seu destino',
+      'merge': 'Entre na',
+      'ramp': 'Pegue a rampa',
+      'on ramp': 'Entre na rampa',
+      'off ramp': 'Saia da rampa',
+      'fork': 'Mantenha-se na',
+      'end of road': 'No fim da estrada, vire',
+      'use lane': 'Use a faixa para',
+      'continue': 'Continue em frente',
+      'roundabout': 'Na rotatória, saia na',
+      'rotary': 'No giradouro, saia na',
+    };
+
+    const modifiers: Record<string, string> = {
+      'left': 'à esquerda',
+      'right': 'à direita',
+      'sharp left': 'acentuadamente à esquerda',
+      'sharp right': 'acentuadamente à direita',
+      'slight left': 'suavemente à esquerda',
+      'slight right': 'suavemente à direita',
+      'straight': 'em frente',
+      'uturn': 'faça o retorno',
+    };
+
+    let text = translations[type] || 'Siga';
+    if (modifier && modifiers[modifier]) {
+      text += ` ${modifiers[modifier]}`;
+    }
+    
+    return text;
+  };
+
+  // 1. Efeito para Geocodificar o endereço (apenas quando o destino mudar)
   useEffect(() => {
-    if (!navigatingTo || !coords) {
-      setRoute([]);
-      setRouteInfo(null);
+    if (!navigatingTo) {
+      setDestCoords(null);
+      setNavigationSteps([]);
+      setCurrentStepIndex(0);
       return;
     }
 
-    const calculateRoute = async () => {
+    const geocode = async () => {
       try {
-        let destLat, destLng;
-
-        // Tenta geocodificar o endereço usando Nominatim
         const geoUrl = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(navigatingTo.address)}&limit=1`;
-        const geoRes = await fetch(geoUrl, {
-          headers: {
-            'User-Agent': 'PegaVisaoApp/1.0'
-          }
+        const res = await fetch(geoUrl, { 
+          headers: { 
+            'User-Agent': `PegaVisaoApp-v1-${Math.random().toString(36).substring(7)}`,
+            'Accept-Language': 'pt-BR,pt;q=0.9'
+          } 
         });
-        const geoData = await geoRes.json();
-
-        if (geoData && geoData.length > 0) {
-          destLat = parseFloat(geoData[0].lat);
-          destLng = parseFloat(geoData[0].lon);
-        } else {
-          // Fallback para demonstração se falhar
-          destLat = coords.lat + 0.005;
-          destLng = coords.lng + 0.005;
+        
+        if (!res.ok) {
+          throw new Error(`Nominatim error: ${res.status}`);
         }
 
-        // OSRM: longitude,latitude
-        const url = `https://router.project-osrm.org/route/v1/driving/${coords.lng},${coords.lat};${destLng},${destLat}?overview=full&geometries=geojson`;
+        const data = await res.json();
         
-        const response = await fetch(url);
+        if (data && data.length > 0) {
+          setDestCoords({
+            lat: parseFloat(data[0].lat),
+            lng: parseFloat(data[0].lon)
+          });
+        } else {
+          // Se falhar o Nominatim, tenta uma aproximação baseada no endereço se contiver números
+          console.warn("Nominatim falhou para:", navigatingTo.address);
+          setDestCoords(null); // Força erro ou fallback no próximo passo
+        }
+      } catch (e) {
+        console.error("Erro geocodificação:", e);
+        setDestCoords(null);
+      }
+    };
+
+    geocode();
+  }, [navigatingTo?.address, navigatingTo?.id]);
+
+  // 2. Efeito para calcular a rota usando OSRM com Anti-Erro
+  useEffect(() => {
+    // LIMPAR ROTA DA TELA IMEDIATAMENTE (Anti-Erro #1)
+    setRoute([]);
+    setRouteInfo(null);
+    setIsCalculating(false);
+
+    if (!navigatingTo || !coords) return;
+
+    let activeRequest = true;
+
+    const calculateRouteSecure = async (isRetry = false) => {
+      setIsCalculating(true);
+      setRouteInfo({ 
+        distance: '--', 
+        duration: '--', 
+        status: isRetry ? 'Recalculando percurso...' : 'Traçando rota...' 
+      });
+
+      try {
+        // Se a geocodificação ainda não terminou ou falhou
+        let finalDestLat = destCoords?.lat;
+        let finalDestLng = destCoords?.lng;
+
+        if (!finalDestLat || !finalDestLng) {
+          if (!isRetry) {
+             // Aguarda um pouco a geocodificação
+             setTimeout(() => { if (activeRequest) calculateRouteSecure(true); }, 1500);
+             return;
+          }
+          // Caso extremo: Fallback se geocodificação falhar definitivamente
+          finalDestLat = coords.lat + 0.002;
+          finalDestLng = coords.lng + 0.002;
+        }
+
+        const routeKey = `${Math.floor(coords.lat*1000)}_${Math.floor(coords.lng*1000)}`;
+        const osrmUrl = `https://router.project-osrm.org/route/v1/driving/${coords.lng},${coords.lat};${finalDestLng},${finalDestLat}?overview=full&geometries=geojson&steps=true&alternatives=false`;
+        
+        const response = await fetch(osrmUrl, {
+          headers: { 'Accept': 'application/json' }
+        });
+        
+        if (!response.ok) {
+          throw new Error(`OSRM HTTP error: ${response.status}`);
+        }
+
         const data = await response.json();
+
+        if (!activeRequest) return;
 
         if (data.code === 'Ok' && data.routes?.[0]) {
           const osrmRoute = data.routes[0];
           const coordinates = osrmRoute.geometry.coordinates.map((coord: [number, number]) => [coord[1], coord[0]]) as [number, number][];
           
+          // Extrai instruções passo a passo
+          if (osrmRoute.legs?.[0]?.steps) {
+            setNavigationSteps(osrmRoute.legs[0].steps);
+            setCurrentStepIndex(0);
+          }
+          const newRouteData = {
+            distance: osrmRoute.distance,
+            duration: osrmRoute.duration,
+            coords: coordinates,
+            destLat: finalDestLat,
+            destLng: finalDestLng,
+            polyline: JSON.stringify(osrmRoute.geometry)
+          };
+
+          const validation = validateRoute(coords, { lat: finalDestLat, lng: finalDestLng }, newRouteData, lastValidRoute);
+
+          if (!validation.ok) {
+            console.warn("[ANTI-ERRO ROTA]", validation.reason);
+            if (!isRetry) {
+              setTimeout(() => { if (activeRequest) calculateRouteSecure(true); }, 800);
+              return;
+            } else {
+              setRouteInfo({ distance: '--', duration: '--', status: validation.reason });
+              setIsCalculating(false);
+              return;
+            }
+          }
+
           setRoute(coordinates);
-          
           const distanceKm = osrmRoute.distance / 1000;
           const durationMin = Math.round(osrmRoute.duration / 60);
           
           setRouteInfo({
             distance: distanceKm.toFixed(1) + ' km',
-            duration: durationMin + ' min'
+            duration: durationMin + ' min',
+            status: 'ROTA VERIFICADA'
           });
+          setLastValidRoute(newRouteData);
+        } else {
+          const errorMsg = data.code === 'NoRoute' ? 'Caminho não encontrado.' : 'Servidor OSRM ocupado.';
+          setRouteInfo({ distance: '--', duration: '--', status: errorMsg });
         }
       } catch (error) {
-        console.error("Erro ao carregar rota OSRM:", error);
+        if (!activeRequest) return;
+        console.error("Erro na rota OSRM:", error);
+        setRouteInfo({ distance: '--', duration: '--', status: 'Servidor instável. Tentando...' });
+        
+        if (!isRetry) {
+          setTimeout(() => { if (activeRequest) calculateRouteSecure(true); }, 2000);
+        }
+      } finally {
+        if (activeRequest) setIsCalculating(false);
       }
     };
 
-    calculateRoute();
-  }, [navigatingTo?.id, coords?.lat, coords?.lng]);
+    calculateRouteSecure();
+
+    return () => {
+      activeRequest = false;
+    };
+    // Reduzimos a frequência de atualização: recala apenas em mudanças significativas ou mudança de destino
+  }, [navigatingTo?.id, navigatingTo?.address, Math.floor(coords?.lat * 5000), Math.floor(coords?.lng * 5000), destCoords]);
 
   const handleRecenter = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -242,15 +463,36 @@ export default function MapBackground({ navigatingTo, onCancelNavigation }: MapB
             <div className="bg-primary-dark text-white p-6 rounded-[2rem] shadow-2xl border border-white/10 flex flex-col gap-4">
               <div className="flex justify-between items-start">
                 <div className="flex gap-4">
-                  <div className="w-12 h-12 bg-primary rounded-2xl flex items-center justify-center shrink-0 shadow-lg shadow-primary/20">
-                    <Navigation className="w-6 h-6 text-primary-dark" />
+                  <div className="w-14 h-14 bg-primary rounded-2xl flex items-center justify-center shrink-0 shadow-lg shadow-primary/20">
+                    {navigationSteps.length > 0 && currentStepIndex < navigationSteps.length ? (
+                      <div className="flex flex-col items-center">
+                        <Navigation className="w-6 h-6 text-primary-dark" />
+                        <span className="text-[9px] font-black text-primary-dark mt-[-2px]">
+                          {navigationSteps[currentStepIndex].distance > 1000 
+                            ? `${(navigationSteps[currentStepIndex].distance/1000).toFixed(1)}km`
+                            : `${Math.round(navigationSteps[currentStepIndex].distance)}m`
+                          }
+                        </span>
+                      </div>
+                    ) : (
+                      <Navigation className="w-8 h-8 text-primary-dark" />
+                    )}
                   </div>
                   <div>
                     <h3 className="text-xl font-display font-black italic tracking-tight leading-none mb-1">
-                      {routeInfo ? `Chegada em ${routeInfo.duration}` : 'Calculando...'}
+                      {navigationSteps.length > 0 && currentStepIndex < navigationSteps.length ? (
+                        <div className="flex flex-col truncate max-w-[200px]">
+                          <span>{getManeuverText(navigationSteps[currentStepIndex].maneuver)}</span>
+                          <span className="text-primary text-sm uppercase not-italic">
+                            {navigationSteps[currentStepIndex].name || 'Siga em frente'}
+                          </span>
+                        </div>
+                      ) : (
+                        routeInfo ? `Chegada em ${routeInfo.duration}` : 'Calculando...'
+                      )}
                     </h3>
                     <p className="text-[10px] font-lexend font-black text-white/40 uppercase tracking-widest truncate max-w-[200px]">
-                      Destino: {navigatingTo.address}
+                      {routeInfo?.status === 'ROTA VERIFICADA' ? `Destino: ${navigatingTo.address.split(',')[0]}` : routeInfo?.status || 'Processando rota...'}
                     </p>
                   </div>
                 </div>
@@ -279,8 +521,10 @@ export default function MapBackground({ navigatingTo, onCancelNavigation }: MapB
 
               <div className="bg-white/5 p-3 rounded-2xl flex items-center justify-between mt-2 border border-white/5">
                 <div className="flex items-center gap-2">
-                  <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" />
-                  <span className="text-[9px] font-bold text-white/50 uppercase tracking-widest leading-none">Localização Verificada</span>
+                  <div className={`w-1.5 h-1.5 rounded-full animate-pulse ${routeInfo?.status === 'ROTA VERIFICADA' ? 'bg-emerald-500' : 'bg-amber-500'}`} />
+                  <span className="text-[9px] font-bold text-white/50 uppercase tracking-widest leading-none">
+                    {routeInfo?.status || 'Iniciando GPS'}
+                  </span>
                 </div>
                 <div className="text-[8px] font-black text-primary uppercase">GPS 5s Ativo</div>
               </div>

@@ -73,28 +73,29 @@ export function FirebaseProvider({ children }: { children: React.ReactNode }) {
       setIsLocating(true);
       setLocationError(null);
 
-      watchId = navigator.geolocation.watchPosition(
-        (position) => {
-          setIsLocating(false);
-          setLocationError(null);
-          setLastVerified(Date.now());
-          const newCoords = {
-            lat: position.coords.latitude,
-            lng: position.coords.longitude
-          };
-          setCoords(newCoords);
+      const updatePos = (position: GeolocationPosition) => {
+        setIsLocating(false);
+        setLocationError(null);
+        setLastVerified(Date.now());
+        const newCoords = {
+          lat: position.coords.latitude,
+          lng: position.coords.longitude
+        };
+        setCoords(newCoords);
 
-          // Update Firestore every minute or significant change to save quota but keep it real-time enough
-          if (user) {
-            const userDocRef = doc(db, 'users', user.uid);
-            setDoc(userDocRef, {
-              lastLocation: {
-                ...newCoords,
-                timestamp: serverTimestamp()
-              }
-            }, { merge: true }).catch(console.error);
-          }
-        },
+        if (user) {
+          const userDocRef = doc(db, 'users', user.uid);
+          setDoc(userDocRef, {
+            lastLocation: {
+              ...newCoords,
+              timestamp: serverTimestamp()
+            }
+          }, { merge: true }).catch(console.error);
+        }
+      };
+
+      watchId = navigator.geolocation.watchPosition(
+        updatePos,
         (error) => {
           setIsLocating(false);
           let message = "Erro ao obter localização.";
@@ -104,8 +105,18 @@ export function FirebaseProvider({ children }: { children: React.ReactNode }) {
           setLocationError(message);
           console.error("Geolocation error:", error);
         },
-        { enableHighAccuracy: true, timeout: 15000, maximumAge: 5000 }
+        { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
       );
+
+      // Force verification every 5 seconds to ensure the pulse is real and GPS is active
+      const intervalId = setInterval(() => {
+        navigator.geolocation.getCurrentPosition(updatePos, () => {}, { enableHighAccuracy: true });
+      }, 5000);
+
+      return () => {
+        if (watchId) navigator.geolocation.clearWatch(watchId);
+        clearInterval(intervalId);
+      };
     }
 
     return () => {

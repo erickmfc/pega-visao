@@ -14,6 +14,7 @@ interface AddDeliveryModalProps {
 export default function AddDeliveryModal({ isOpen, onClose }: AddDeliveryModalProps) {
   const { user } = useFirebase();
   const [isScanning, setIsScanning] = useState(false);
+  const [scanError, setScanError] = useState<string | null>(null);
   const scannerRef = useRef<Html5Qrcode | null>(null);
   const [formData, setFormData] = useState({
     orderId: '',
@@ -65,7 +66,15 @@ export default function AddDeliveryModal({ isOpen, onClose }: AddDeliveryModalPr
         }
       ).catch(err => {
         console.error("Erro ao iniciar camera:", err);
-        setIsScanning(false);
+        let msg = "Erro ao iniciar camera.";
+        if (err.name === 'NotFoundError' || err.message?.includes('NotFound')) {
+          msg = "Nenhuma câmera encontrada no dispositivo.";
+        } else if (err.name === 'NotAllowedError') {
+          msg = "Permissão da câmera negada.";
+        }
+        setScanError(msg);
+        // We leave isScanning true for a bit to show error or just close it?
+        // Let's keep it true and show error in the scanner view
       });
     }
 
@@ -88,6 +97,7 @@ export default function AddDeliveryModal({ isOpen, onClose }: AddDeliveryModalPr
       }
     }
     setIsScanning(false);
+    setScanError(null);
   };
 
   const handleScanClick = () => {
@@ -140,23 +150,44 @@ export default function AddDeliveryModal({ isOpen, onClose }: AddDeliveryModalPr
                 animate={{ opacity: 1 }}
                 className="absolute inset-0 z-50 bg-black flex flex-col items-center justify-center p-8 text-center"
               >
-                <div className="w-full max-w-[280px] aspect-square border-4 border-primary rounded-3xl relative overflow-hidden bg-gray-900 shadow-2xl">
-                  <div id="reader" className="w-full h-full" />
-                  <motion.div 
-                    animate={{ y: [0, 280, 0] }}
-                    transition={{ duration: 1.5, repeat: Infinity, ease: "linear" }}
-                    className="absolute w-full h-0.5 bg-primary shadow-[0_0_15px_rgba(255,215,0,1)] z-20"
-                  />
-                  <div className="absolute inset-0 border-[30px] border-black/60 pointer-events-none z-10" />
-                </div>
-                <h3 className="text-white font-display font-black text-lg mt-6 italic">ESCANEANDO ETIQUETA...</h3>
-                <p className="text-white/60 text-[10px] mt-2 font-lexend">Centralize o QR ou Código de Barras</p>
-                <button 
-                  onClick={stopScanning}
-                  className="mt-8 text-white/50 font-bold text-[10px] uppercase tracking-widest px-6 py-2 border border-white/10 rounded-full"
-                >
-                  CANCELAR
-                </button>
+                {!scanError ? (
+                  <>
+                    <div className="w-full max-w-[280px] aspect-square border-4 border-primary rounded-3xl relative overflow-hidden bg-gray-900 shadow-2xl">
+                      <div id="reader" className="w-full h-full" />
+                      <motion.div 
+                        animate={{ y: [0, 280, 0] }}
+                        transition={{ duration: 1.5, repeat: Infinity, ease: "linear" }}
+                        className="absolute w-full h-0.5 bg-primary shadow-[0_0_15px_rgba(255,215,0,1)] z-20"
+                      />
+                      <div className="absolute inset-0 border-[30px] border-black/60 pointer-events-none z-10" />
+                    </div>
+                    <h3 className="text-white font-display font-black text-lg mt-6 italic">ESCANEANDO ETIQUETA...</h3>
+                    <p className="text-white/60 text-[10px] mt-2 font-lexend">Centralize o QR ou Código de Barras</p>
+                  </>
+                ) : (
+                  <div className="flex flex-col items-center">
+                    <div className="w-16 h-16 bg-red-500/20 text-red-500 rounded-3xl flex items-center justify-center mb-6">
+                      <Camera className="w-8 h-8" />
+                    </div>
+                    <h3 className="text-white font-display font-black text-lg italic mb-2">OPS! CÂMERA INDISPONÍVEL</h3>
+                    <p className="text-white/60 text-xs font-lexend mb-8 max-w-[200px]">{scanError}</p>
+                    <button 
+                      onClick={() => setIsScanning(false)}
+                      className="bg-white/10 text-white px-8 py-3 rounded-2xl font-bold text-[10px] uppercase tracking-widest"
+                    >
+                      VOLTAR E DIGITAR MANUAL
+                    </button>
+                  </div>
+                )}
+                
+                {!scanError && (
+                  <button 
+                    onClick={stopScanning}
+                    className="mt-8 text-white/50 font-bold text-[10px] uppercase tracking-widest px-6 py-2 border border-white/10 rounded-full"
+                  >
+                    CANCELAR
+                  </button>
+                )}
               </motion.div>
             )}
 

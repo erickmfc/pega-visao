@@ -8,15 +8,18 @@ import DeliveryList from './components/DeliveryList';
 import QuickActions from './components/QuickActions';
 import PerformanceStats from './components/PerformanceStats';
 import RouteSummary from './components/RouteSummary';
+import AddDeliveryModal from './components/AddDeliveryModal';
+import PackageScanner from './components/PackageScanner';
 import { useFirebase } from './lib/FirebaseProvider';
 import { signInWithGoogle, auth } from './lib/firebase';
-import { LayoutDashboard, Wallet, Users, Settings, LogIn, Plus, TrendingUp, Fuel as FuelIcon, MapPin, History, AlertCircle, AlertTriangle } from 'lucide-react';
+import { LayoutDashboard, Wallet, Users, Settings, LogIn, Plus, TrendingUp, Fuel as FuelIcon, MapPin, History, AlertCircle, AlertTriangle, X, Check } from 'lucide-react';
 
 export default function App() {
   const { user, profile, loading } = useFirebase();
   const [showSplash, setShowSplash] = useState(true);
   const [activeTab, setActiveTab] = useState('mapa');
   const [isAdding, setIsAdding] = useState(false);
+  const [isScanning, setIsScanning] = useState(false);
   const [showSummary, setShowSummary] = useState(false);
   const [navigatingDelivery, setNavigatingDelivery] = useState<{ id: string, address: string } | null>(null);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -150,13 +153,55 @@ export default function App() {
                 navigatingTo={navigatingDelivery} 
                 onCancelNavigation={() => setNavigatingDelivery(null)}
               />
-              <div className="mt-auto pointer-events-none relative z-10 p-4 pb-24 flex flex-col gap-4">
-                <QuickActions 
-                  onAddDelivery={() => setIsAdding(true)} 
-                  onShowStats={() => setShowSummary(true)}
-                />
-                <DeliveryList onNavigate={setNavigatingDelivery} />
-              </div>
+              {!navigatingDelivery && (
+                <div className="mt-auto pointer-events-none relative z-10 p-4 pb-24 flex flex-col gap-4">
+                  <QuickActions 
+                    onAddDelivery={() => setIsAdding(true)} 
+                    onShowStats={() => setShowSummary(true)}
+                    onScanBatch={() => setIsScanning(true)}
+                  />
+                  <DeliveryList 
+                    onNavigate={setNavigatingDelivery} 
+                    onFinishRoute={() => setShowSummary(true)}
+                  />
+                </div>
+              )}
+              {navigatingDelivery && (
+                <div className="absolute bottom-6 left-0 right-0 z-50 pointer-events-none px-6 flex flex-col gap-3">
+                  <motion.div 
+                    initial={{ y: 20, opacity: 0 }}
+                    animate={{ y: 0, opacity: 1 }}
+                    className="bg-white/95 backdrop-blur-3xl rounded-[2rem] p-5 shadow-2xl border border-white/50 pointer-events-auto flex items-center justify-between"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 bg-primary/20 rounded-2xl flex items-center justify-center">
+                        <MapPin className="w-5 h-5 text-primary-dark" />
+                      </div>
+                      <div className="max-w-[150px]">
+                        <p className="text-[8px] font-lexend font-black text-gray-400 uppercase tracking-widest leading-none mb-1">Destino</p>
+                        <p className="text-xs font-bold text-on-surface truncate">{navigatingDelivery.address}</p>
+                      </div>
+                    </div>
+                    <button 
+                      onClick={() => setNavigatingDelivery(null)}
+                      className="bg-gray-100 text-gray-500 p-3 rounded-2xl active:scale-95 transition-all"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </motion.div>
+
+                  <button 
+                    onClick={() => {
+                      // Simulating finishing this specific delivery for the UX
+                      // in a real app this would update the specific doc status
+                      setNavigatingDelivery(null);
+                    }}
+                    className="w-full bg-emerald-500 text-white font-display font-black italic px-8 py-5 rounded-[2rem] shadow-2xl active:scale-95 transition-all flex items-center justify-center gap-2 pointer-events-auto"
+                  >
+                    CONCLUIR ENTREGA <Check className="w-5 h-5" />
+                  </button>
+                </div>
+              )}
             </motion.div>
           ) : activeTab === 'ganhos' ? (
             <motion.div 
@@ -322,6 +367,15 @@ export default function App() {
           ) : null}
         </AnimatePresence>
       </main>
+
+      <AnimatePresence>
+        {isAdding && (
+          <AddDeliveryModal 
+            isOpen={isAdding} 
+            onClose={() => setIsAdding(false)} 
+          />
+        )}
+      </AnimatePresence>
 
       <AnimatePresence>
         {showSummary && (

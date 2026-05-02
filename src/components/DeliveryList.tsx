@@ -12,15 +12,17 @@ export default function DeliveryList({ onFinishRoute, onNavigate }: DeliveryList
 
   return (
     <motion.div 
-      initial={{ y: '70%' }}
-      animate={{ y: '20%' }}
+      initial={{ y: '90%' }}
+      animate={{ y: '35%' }}
       drag="y"
-      dragConstraints={{ top: 0, bottom: 800 }}
-      className="absolute bottom-0 left-0 right-0 z-30 flex flex-col items-center pointer-events-none"
+      dragConstraints={{ top: -500, bottom: 650 }}
+      dragElastic={0.15}
+      dragTransition={{ bounceStiffness: 400, bounceDamping: 30 }}
+      className="absolute bottom-0 left-0 right-0 z-30 flex flex-col items-center pointer-events-auto group"
     >
-      <div className="w-12 h-1.5 bg-surface-highest rounded-full mb-3 shadow-sm opacity-50" />
+      <div className="w-16 h-1.5 bg-gray-300 rounded-full mb-3 shadow-md border border-white/20 pointer-events-auto cursor-grab active:cursor-grabbing" />
       
-      <div className="w-full max-w-lg bg-white/95 backdrop-blur-3xl rounded-t-[2.5rem] shadow-[0_-20px_50px_rgba(0,0,0,0.08)] pointer-events-auto flex flex-col h-[85vh] border-t border-gray-100">
+      <div className="w-full max-w-lg bg-white/95 backdrop-blur-3xl rounded-t-[3rem] shadow-[0_-20px_60px_rgba(0,0,0,0.15)] pointer-events-auto flex flex-col h-[92vh] border-t border-gray-100 overflow-hidden">
         
         <div className="px-6 py-5 border-b border-gray-50 flex justify-between items-center bg-white/50 rounded-t-[2.5rem] sticky top-0 z-10">
           <div>
@@ -42,7 +44,7 @@ export default function DeliveryList({ onFinishRoute, onNavigate }: DeliveryList
           )}
         </div>
 
-        <div className="overflow-y-auto p-4 flex flex-col gap-3 pb-32 touch-pan-y no-scrollbar">
+        <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-3 pb-40 touch-pan-y no-scrollbar">
           {deliveries.length > 0 ? (
             deliveries.map((delivery, index) => {
               const isFirstPending = index === deliveries.findIndex(d => d.status === 'PENDENTE');
