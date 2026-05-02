@@ -1,0 +1,8 @@
+{
+  "name": "Pega Visão",
+  "description": "Organizador inteligente de rotas, pacotes, combustível e ganhos para entregadores.",
+  "requestFramePermissions": [
+    "geolocation"
+  ],
+  "majorCapabilities": []
+}
