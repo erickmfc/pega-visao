@@ -1,0 +1,62 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "App user profile information.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "name": { "type": "string" },
+        "email": { "type": "string" },
+        "avatar": { "type": "string" },
+        "rating": { "type": "number" },
+        "isOnline": { "type": "boolean" },
+        "currentEarnings": { "type": "number" },
+        "totalDeliveries": { "type": "number" },
+        "dailyGoal": { "type": "number" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "name", "email"]
+    },
+    "Delivery": {
+      "title": "Delivery",
+      "description": "Delivery order information.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "address": { "type": "string" },
+        "status": { "type": "string", "enum": ["PENDENTE", "ENTREGUE", "PROBLEMA"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "address", "status"]
+    },
+    "Earning": {
+      "title": "Earning",
+      "description": "Record of a completed earning transaction.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "deliveryId": { "type": "string" },
+        "amount": { "type": "number" },
+        "date": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "amount", "date"]
+    }
+  },
+  "firestore": {
+    "users/{userId}": {
+      "schema": "User",
+      "description": "Store individual user profile."
+    },
+    "deliveries/{deliveryId}": {
+      "schema": "Delivery",
+      "description": "Store individual delivery orders."
+    },
+    "earnings/{earningId}": {
+      "schema": "Earning",
+      "description": "Store individual earning records."
+    }
+  }
+}

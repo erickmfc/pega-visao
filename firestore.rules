@@ -1,0 +1,75 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 0. Default deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- Helpers ---
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    // --- User Rules ---
+    match /users/{userId} {
+      function isValidUser(data) {
+        return data.keys().hasAll(['uid', 'name', 'email']) &&
+               data.uid == request.auth.uid &&
+               data.name is string && data.name.size() <= 100 &&
+               data.email is string && data.email.size() <= 100 &&
+               (data.get('isOnline', true) is bool) &&
+               (data.get('currentEarnings', 0) is number) &&
+               (data.get('totalDeliveries', 0) is number) &&
+               (data.get('dailyGoal', 0) is number);
+      }
+
+      allow get: if isSignedIn(); // Allow reading basic profile
+      allow create: if isSignedIn() && isOwner(userId) && isValidUser(request.resource.data);
+      allow update: if isSignedIn() && isOwner(userId) && isValidUser(request.resource.data) &&
+                    (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name', 'avatar', 'isOnline', 'currentEarnings', 'totalDeliveries', 'dailyGoal', 'updatedAt', 'lastLocation']));
+    }
+
+    // --- Delivery Rules ---
+    match /deliveries/{deliveryId} {
+      function isValidDelivery(data) {
+        return data.keys().hasAll(['userId', 'address', 'status']) &&
+               data.userId == request.auth.uid &&
+               data.address is string && data.address.size() <= 200 &&
+               data.status in ['PENDENTE', 'ENTREGUE', 'PROBLEMA'] &&
+               (data.get('priority', 'normal') in ['baixa', 'normal', 'alta']) &&
+               (data.get('notes', '').size() <= 500);
+      }
+
+      allow list: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow get: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow create: if isSignedIn() && isValidDelivery(request.resource.data);
+      allow update: if isSignedIn() && resource.data.userId == request.auth.uid && 
+                    isValidDelivery(request.resource.data) &&
+                    request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'updatedAt']);
+      allow delete: if false; // Riders shouldn't delete deliveries for audit
+    }
+
+    // --- Earning Rules ---
+    match /earnings/{earningId} {
+      function isValidEarning(data) {
+        return data.keys().hasAll(['userId', 'amount', 'date']) &&
+               data.userId == request.auth.uid &&
+               data.amount is number && data.amount >= 0;
+      }
+
+      allow list: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow get: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow create: if isSignedIn() && isValidEarning(request.resource.data);
+      allow update: if false; // Earnings are immutable once recorded
+    }
+  }
+}
