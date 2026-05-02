@@ -3,19 +3,27 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import TopBar from './components/TopBar';
 import BottomNav from './components/BottomNav';
 import MapBackground from './components/MapBackground';
 import DeliveryList from './components/DeliveryList';
+import SplashScreen from './components/SplashScreen';
 import { Wallet, Users, LayoutDashboard, History, Settings, TrendingUp } from 'lucide-react';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState('mapa');
+  const [showSplash, setShowSplash] = useState(true);
 
   return (
     <div className="h-screen w-full flex flex-col overflow-hidden relative">
+      <AnimatePresence>
+        {showSplash && (
+          <SplashScreen onComplete={() => setShowSplash(false)} />
+        )}
+      </AnimatePresence>
+
       <TopBar />
 
       <main className="flex-1 w-full relative">
@@ -64,18 +72,18 @@ export default function App() {
               </div>
 
               {/* Quick Actions */}
-              <div className="flex gap-4 mb-8 overflow-x-auto pb-4 no-scrollbar">
+              <div className="grid grid-cols-4 gap-4 mb-8">
                 {[
-                  { icon: History, label: 'Histórico' },
-                  { icon: Wallet, label: 'Resgate' },
-                  { icon: LayoutDashboard, label: 'Relatórios' },
-                  { icon: Settings, label: 'Meta Diária' }
+                  { icon: History, label: 'Histórico', color: 'text-blue-500', bg: 'bg-blue-50' },
+                  { icon: Wallet, label: 'Resgate', color: 'text-emerald-500', bg: 'bg-emerald-50' },
+                  { icon: LayoutDashboard, label: 'Relatórios', color: 'text-indigo-500', bg: 'bg-indigo-50' },
+                  { icon: Settings, label: 'Meta Diária', color: 'text-orange-500', bg: 'bg-orange-50' }
                 ].map((action, i) => (
-                  <button key={i} className="flex flex-col items-center gap-2 min-w-[80px]">
-                    <div className="w-14 h-14 bg-surface-low rounded-2xl flex items-center justify-center border border-surface-highest hover:bg-surface-high transition-colors">
-                      <action.icon className="w-6 h-6 text-on-surface-variant" />
+                  <button key={i} className="flex flex-col items-center gap-2 group">
+                    <div className={`w-full aspect-square ${action.bg} rounded-2xl flex items-center justify-center border border-white/50 shadow-sm group-active:scale-95 transition-all`}>
+                      <action.icon className={`w-6 h-6 ${action.color}`} />
                     </div>
-                    <span className="text-[10px] font-lexend font-bold text-gray-400 uppercase">{action.label}</span>
+                    <span className="text-[9px] font-lexend font-bold text-gray-400 uppercase text-center leading-tight">{action.label}</span>
                   </button>
                 ))}
               </div>
@@ -128,8 +136,8 @@ export default function App() {
               className="absolute inset-0 pt-20 px-6"
             >
               <div className="flex items-center gap-4 mb-10">
-                <div className="w-20 h-20 rounded-3xl overflow-hidden border-2 border-primary shadow-lg shadow-primary/10">
-                  <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=Matheus" alt="Avatar" className="w-full h-full object-cover" />
+                <div className="w-20 h-20 rounded-3xl overflow-hidden bg-primary p-2 shadow-lg shadow-primary/10">
+                  <img src="https://images.unsplash.com/photo-1558981403-c5f9899a28bc?auto=format&fit=crop&q=80&w=200" alt="Avatar" className="w-full h-full object-contain" />
                 </div>
                 <div>
                   <h2 className="text-2xl font-display font-black text-on-surface">Matheus Silva</h2>
